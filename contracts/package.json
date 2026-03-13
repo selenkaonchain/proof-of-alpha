@@ -1,0 +1,21 @@
+{
+    "name": "proof-of-alpha-contract",
+    "version": "1.0.0",
+    "private": true,
+    "description": "ProofOfAlpha OP_NET smart contract (AssemblyScript)",
+    "scripts": {
+        "build": "asc src/contract/index.ts --target contract --measure --uncheckedBehavior never",
+        "deploy": "node deploy.mjs"
+    },
+    "dependencies": {
+        "@btc-vision/btc-runtime": "rc",
+        "@btc-vision/as-bignum": "latest",
+        "@btc-vision/opnet-transform": "latest"
+    },
+    "devDependencies": {
+        "@btc-vision/assemblyscript": "latest",
+        "opnet": "rc",
+        "@btc-vision/bitcoin": "rc",
+        "@btc-vision/transaction": "rc"
+    }
+}

@@ -1,0 +1,159 @@
+{
+    "functions": [
+        {
+            "name": "commitPrediction",
+            "type": "Function",
+            "payable": false,
+            "onlyOwner": false,
+            "inputs": [
+                {
+                    "name": "hash",
+                    "type": "BYTES32"
+                },
+                {
+                    "name": "deadline",
+                    "type": "UINT64"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "success",
+                    "type": "BOOL"
+                }
+            ]
+        },
+        {
+            "name": "revealPrediction",
+            "type": "Function",
+            "payable": false,
+            "onlyOwner": false,
+            "inputs": [
+                {
+                    "name": "hash",
+                    "type": "BYTES32"
+                },
+                {
+                    "name": "outcome",
+                    "type": "UINT8"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "success",
+                    "type": "BOOL"
+                }
+            ]
+        },
+        {
+            "name": "getCommitment",
+            "type": "View",
+            "payable": false,
+            "onlyOwner": false,
+            "inputs": [
+                {
+                    "name": "hash",
+                    "type": "BYTES32"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "owner",
+                    "type": "UINT256"
+                },
+                {
+                    "name": "timestamp",
+                    "type": "UINT256"
+                },
+                {
+                    "name": "deadline",
+                    "type": "UINT256"
+                },
+                {
+                    "name": "outcome",
+                    "type": "UINT256"
+                }
+            ]
+        },
+        {
+            "name": "getUserStats",
+            "type": "View",
+            "payable": false,
+            "onlyOwner": false,
+            "inputs": [
+                {
+                    "name": "user",
+                    "type": "ADDRESS"
+                }
+            ],
+            "outputs": [
+                {
+                    "name": "total",
+                    "type": "UINT256"
+                },
+                {
+                    "name": "correct",
+                    "type": "UINT256"
+                },
+                {
+                    "name": "wrong",
+                    "type": "UINT256"
+                },
+                {
+                    "name": "streak",
+                    "type": "UINT256"
+                }
+            ]
+        },
+        {
+            "name": "getTotalCommitments",
+            "type": "View",
+            "payable": false,
+            "onlyOwner": false,
+            "inputs": [],
+            "outputs": [
+                {
+                    "name": "total",
+                    "type": "UINT256"
+                }
+            ]
+        }
+    ],
+    "events": [
+        {
+            "name": "PredictionCommitted",
+            "values": [
+                {
+                    "name": "committer",
+                    "type": "ADDRESS"
+                },
+                {
+                    "name": "hash",
+                    "type": "UINT256"
+                },
+                {
+                    "name": "deadline",
+                    "type": "UINT64"
+                }
+            ],
+            "type": "Event"
+        },
+        {
+            "name": "PredictionRevealed",
+            "values": [
+                {
+                    "name": "committer",
+                    "type": "ADDRESS"
+                },
+                {
+                    "name": "hash",
+                    "type": "UINT256"
+                },
+                {
+                    "name": "outcome",
+                    "type": "UINT8"
+                }
+            ],
+            "type": "Event"
+        }
+    ]
+}
