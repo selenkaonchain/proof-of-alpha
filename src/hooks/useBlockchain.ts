@@ -1,14 +1,6 @@
 /**
  * useBlockchain — OP_NET wallet connection and on-chain interaction hook.
- *
- * MLDSA FIX: OPWallet hardcodes linkMLDSAPublicKeyToAddress: true in
- * signInteractionInternal, causing "Can not reassign existing MLDSA public key"
- * on every tx after the first. No way to override via native signInteraction.
- *
- * WORKAROUND: Subclass UnisatSigner, override get unisat() to return a clean
- * adapter object that routes signPsbt through OPWallet's _request RPC.
- * This avoids Proxy issues (can't patch or reassign read-only window props).
- * Hide window.opnet.web3 during send to bypass OPWallet's signInteraction.
+ * Per BOB / Vibecode Bible: signer always null — OPWallet extension handles signing.
  */
 
 import { useRef, useState, useCallback, useEffect } from 'react';
@@ -20,99 +12,6 @@ import {
     PROOF_OF_ALPHA_ABI,
     type IProofOfAlphaContract,
 } from '../contracts/ProofOfAlphaABI';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyFn = (...args: any[]) => any;
-
-/**
- * Builds a plain adapter object that looks like a Unisat wallet to the SDK.
- * Routes signPsbt through OPWallet's _request RPC (the only way to reach
- * OPWallet's signPsbt handler from a dApp — it's not exposed as a method).
- * No Proxy patching, no window property reassignment.
- */
-function buildOPWalletAdapter() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const opnet = (window as any).opnet;
-
-    return {
-        // Used by UnisatSigner.init()
-        getNetwork: () => opnet.getNetwork(),
-        getPublicKey: () => opnet.getPublicKey(),
-        getAccounts: () => opnet.getAccounts(),
-        getBalance: () => opnet.getBalance(),
-        requestAccounts: () => opnet.requestAccounts(),
-        getChain: () => opnet.getChain(),
-
-        // CRITICAL: signPsbt routed through _request RPC
-        signPsbt: async (psbtHex: string, options?: unknown) => {
-            console.log('[PoA] signPsbt called, opening OPWallet popup...');
-            const result = await opnet._request({
-                method: 'signPsbt',
-                params: { psbtHex, options: options || { autoFinalized: true } },
-            });
-            console.log('[PoA] signPsbt approved');
-            return result;
-        },
-        signPsbts: async (hexArr: string[], optArr: unknown[]) => {
-            const results: string[] = [];
-            for (let i = 0; i < hexArr.length; i++) {
-                const r = await opnet._request({
-                    method: 'signPsbt',
-                    params: { psbtHex: hexArr[i], options: optArr[i] || { autoFinalized: true } },
-                });
-                results.push(r);
-            }
-            return results;
-        },
-
-        // Other methods the SDK might call
-        signData: (hex: string, type?: string) => opnet.signData(hex, type),
-        signMessage: (msg: string, type?: string) => opnet.signMessage(msg, type),
-        pushTx: (opts: unknown) => opnet.pushTx(opts),
-        pushPsbt: (hex: string) => opnet.pushPsbt(hex),
-
-        // Event stubs (not needed for signing)
-        on: (() => {}) as AnyFn,
-        removeListener: (() => {}) as AnyFn,
-    };
-}
-
-/**
- * Hides window.opnet.web3 during a callback so the SDK's
- * detectInteractionOPWallet() returns null → local build path.
- */
-async function withoutOPWalletDetection<T>(fn: () => Promise<T>): Promise<T> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const opnet = (window as any).opnet;
-    const savedWeb3 = opnet?.web3;
-    if (opnet) opnet.web3 = undefined;
-    try {
-        return await fn();
-    } finally {
-        if (opnet) opnet.web3 = savedWeb3;
-    }
-}
-
-/**
- * Creates an initialized UnisatSigner subclass that routes through OPWallet.
- * Overrides `get unisat()` to return our adapter (avoids read-only window.unisat).
- */
-async function createOPWalletSigner() {
-    const { UnisatSigner } = await import('@btc-vision/transaction');
-    const adapter = buildOPWalletAdapter();
-
-    class OPWalletSigner extends UnisatSigner {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        get unisat(): any {
-            return adapter;
-        }
-    }
-
-    const signer = new OPWalletSigner();
-    await signer.init();
-    console.log('[PoA] OPWalletSigner initialized, network:', signer.network);
-    return signer;
-}
 
 const NETWORK = networks.opnetTestnet;
 const RPC_URL = 'https://testnet.opnet.org';
@@ -284,32 +183,17 @@ export function useBlockchain(): BlockchainState {
                     throw new Error(`Contract reverted: ${simulation.revert}`);
                 }
 
-                // Use UnisatSigner pointed at OPWallet, with web3 hidden to bypass
-                // OPWallet's native signInteraction (which hardcodes linkMLDSA: true).
-                setTxStatus({ type: 'pending', message: 'Creating signer... Please wait.' });
-                const signer = await createOPWalletSigner();
+                // Per BOB / Vibecode Bible: signer null — OPWallet extension signs
+                setTxStatus({ type: 'pending', message: 'Approve transaction in OPWallet...' });
 
-                setTxStatus({ type: 'pending', message: 'Approve the PSBT signing request(s) in OPWallet popup.' });
-                console.log('[PoA] Sending commit transaction (local build path)...');
-
-                const receipt = await Promise.race([
-                    withoutOPWalletDetection(() =>
-                        simulation.sendTransaction({
-                            signer: signer as unknown as null,
-                            mldsaSigner: null,
-                            refundTo: wc.walletAddress!,
-                            maximumAllowedSatToSpend: 100000n,
-                            feeRate: 1,
-                            network: NETWORK,
-                            linkMLDSAPublicKeyToAddress: false,
-                        }),
-                    ),
-                    new Promise<never>((_, reject) =>
-                        setTimeout(() => reject(new Error(
-                            'Transaction timed out (2 min). Check OPWallet — you may need to approve a popup.'
-                        )), 120_000),
-                    ),
-                ]);
+                const receipt = await simulation.sendTransaction({
+                    signer: null,
+                    mldsaSigner: null,
+                    refundTo: wc.walletAddress!,
+                    maximumAllowedSatToSpend: 100000n,
+                    feeRate: 1,
+                    network: NETWORK,
+                });
 
                 const txId = receipt?.transactionId || 'confirmed';
                 const txIdStr = typeof txId === 'string' ? txId : String(txId);
@@ -363,31 +247,17 @@ export function useBlockchain(): BlockchainState {
                     throw new Error(`Contract reverted: ${simulation.revert}`);
                 }
 
-                // Use UnisatSigner pointed at OPWallet, with web3 hidden
-                setTxStatus({ type: 'pending', message: 'Creating signer... Please wait.' });
-                const signer = await createOPWalletSigner();
+                // Per BOB / Vibecode Bible: signer null — OPWallet extension signs
+                setTxStatus({ type: 'pending', message: 'Approve transaction in OPWallet...' });
 
-                setTxStatus({ type: 'pending', message: 'Approve the PSBT signing request(s) in OPWallet popup.' });
-                console.log('[PoA] Sending reveal transaction (local build path)...');
-
-                const receipt = await Promise.race([
-                    withoutOPWalletDetection(() =>
-                        simulation.sendTransaction({
-                            signer: signer as unknown as null,
-                            mldsaSigner: null,
-                            refundTo: wc.walletAddress!,
-                            maximumAllowedSatToSpend: 100000n,
-                            feeRate: 1,
-                            network: NETWORK,
-                            linkMLDSAPublicKeyToAddress: false,
-                        }),
-                    ),
-                    new Promise<never>((_, reject) =>
-                        setTimeout(() => reject(new Error(
-                            'Transaction timed out (2 min). Check OPWallet — you may need to approve a popup.'
-                        )), 120_000),
-                    ),
-                ]);
+                const receipt = await simulation.sendTransaction({
+                    signer: null,
+                    mldsaSigner: null,
+                    refundTo: wc.walletAddress!,
+                    maximumAllowedSatToSpend: 100000n,
+                    feeRate: 1,
+                    network: NETWORK,
+                });
 
                 const txId = receipt?.transactionId || 'confirmed';
                 const txIdStr = typeof txId === 'string' ? txId : String(txId);
